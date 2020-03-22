@@ -11,7 +11,7 @@ DB4 == dBase IV
 from collections import namedtuple
 from .ifiles import ifind
 from .struct_parser import StructParser
-
+import io, os
 
 
 VFPFileHeader = StructParser(
@@ -69,7 +69,22 @@ class MemoFile(object):
         pass
 
     def _open(self):
-        self.file = open(self.filename, 'rb')
+        if isinstance(self.filename, str):
+            self.file = open(self.filename, 'rb')
+        elif isinstance(self.filename, io.BytesIO):
+            self.file = self.filename
+        elif isinstance(self.filename, bytes):
+            tf = io.BytesIO()
+            self.file = tf.write(self.filename)
+            self.file.seek(0)
+        elif isinstance(self.filename, bytes):
+            tf = io.BytesIO()
+            self.file = tf.write(self.filename)
+            self.file.seek(0)
+        elif isinstance(self.filename, io.BufferedReader):
+            self.file = self.filename
+            self.file.seek(0)
+
         # Shortcuts for speed.
         self._read = self.file.read
         self._seek = self.file.seek
@@ -93,6 +108,9 @@ class FakeMemoFile(MemoFile):
         return None
 
     def _open(self):
+        pass
+
+    def _seek(self, offset=0, whence=0):
         pass
 
     _init = _close = _open
@@ -163,17 +181,31 @@ class DB4MemoFile(MemoFile):
         return data.split(b'\x1f', 1)[0]
 
 
-def find_memofile(dbf_filename):
-    for ext in ['.fpt', '.dbt']:
-        name = ifind(dbf_filename, ext=ext)
-        if name:
-            return name
-    else:
-        return None
+def find_memofile(dbf_filenames, fnames=None):
+    for key in dbf_filenames:
+        dbf_filename = dbf_filenames[key]
+        if fnames is None:
+            for ext in ['.fpt', '.dbt']:
+                name = ifind(dbf_filename, ext=ext)
+                if name:
+                    return name
+        else:
+            for search in [ f"{dbf_filename}.fpt", 
+                                   f"{dbf_filename}.dbt",
+                                   f"{os.path.splitext(dbf_filename)[0]}.fpt", 
+                                   f"{os.path.splitext(dbf_filename)[0]}.dbt", 
+                                   f"{os.path.basename(os.path.splitext(dbf_filename)[0])}.fpt", 
+                                   f"{os.path.basename(os.path.splitext(dbf_filename)[0])}.dbt", 
+                                   f"{os.path.basename(dbf_filename)}.fpt", 
+                                   f"{os.path.basename(dbf_filename)}.dbt"]:
+                for name in fnames:
+                    if name.lower().endswith(search):
+                        return name
+    return None
 
 
-def open_memofile(filename, dbversion):
-    if filename.lower().endswith('.fpt'):
+def open_memofile(fname, filename, dbversion):
+    if fname.lower().endswith('.fpt'):
         return VFPMemoFile(filename)
     else:
         # print('######', dbversion)
